@@ -17,6 +17,7 @@ _SCHEMA = {
         "target_subscription_id": {"type": "STRING"},
         "rationale": {"type": "STRING"},
         "confidence": {"type": "NUMBER"},
+        "customer_message": {"type": "STRING"},
     },
     "required": [
         "action_type",
@@ -26,6 +27,7 @@ _SCHEMA = {
         "target_subscription_id",
         "rationale",
         "confidence",
+        "customer_message",
     ],
 }
 
@@ -65,11 +67,20 @@ propose it when there's a real Stripe customer to credit.
 - Your action_type must be consistent with your own rationale: if your rationale concludes a charge was \
 legitimate, do not propose refunding it.
 
+- customer_message: only when action_type is "no_action" AND real billing history was actually investigated \
+(not when there was no matching Stripe customer at all), write a plain, specific, customer-facing explanation \
+of why no billing action is being taken, grounded in the real Stripe data (e.g. "this was a legitimate \
+proration from your plan change" or "these are two separate charges: your subscription renewal and an \
+add-on purchase"). Never include an internal identifier (a Stripe id like ch_..., sub_..., or cus_...); refer \
+to charges by date and amount. Never add a generic conversational closer like "let us know if you have \
+questions". State the outcome plainly and stop. For every other action_type, or when there's no real billing \
+history to explain, leave this empty, the system already has a specific default message for those.
+
 Output: action_type, amount (integer cents, 0 unless action_type is refund/partial_refund/apply_account_credit), \
 currency, target_transaction_id (empty string unless action_type is refund/partial_refund), \
 target_subscription_id (empty string unless action_type is cancel_subscription), rationale (2-4 sentences, \
-this will be shown to a human reviewer, so make the reasoning legible, not just a verdict), and confidence \
-(0-1)."""
+this will be shown to a human reviewer, so make the reasoning legible, not just a verdict), confidence (0-1), \
+customer_message (empty string if not applicable)."""
 
 
 def _format_prompt(ticket_text: str, classification: Classification, stripe_history: StripeHistory) -> str:
@@ -93,4 +104,6 @@ async def reason_about_ticket(
         result["target_transaction_id"] = None
     if not result.get("target_subscription_id"):
         result["target_subscription_id"] = None
+    if not result.get("customer_message"):
+        result["customer_message"] = None
     return ProposedAction.model_validate(result)

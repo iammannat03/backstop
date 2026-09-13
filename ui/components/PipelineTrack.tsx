@@ -7,7 +7,7 @@ export function PipelineTrack({ status, pulseDelay = "0s" }: { status: TicketSta
   const inFlight = !hold && !isDone(status);
 
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="flex shrink-0 items-center gap-2.5 whitespace-nowrap">
       <div className="flex gap-[3px]">
         {PIPELINE_STAGES.map((stage, i) => {
           let bg = "var(--color-neutral-300)";

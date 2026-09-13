@@ -73,7 +73,7 @@ export function TicketsListClient({ initial, initialStats }: { initial: ListData
           initialDateFrom={searchParams.get("dateFrom") ?? ""}
           initialDateTo={searchParams.get("dateTo") ?? ""}
         />
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-hidden">
           <TicketsTable tickets={tickets} />
         </div>
         <Pagination page={page} pageSize={pageSize} total={total} />

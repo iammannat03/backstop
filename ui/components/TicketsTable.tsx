@@ -15,16 +15,16 @@ function accountName(ticket: Ticket): string {
 
 export function TicketsTable({ tickets }: { tickets: Ticket[] }) {
   return (
-    <div className="overflow-x-auto border border-divider bg-[color-mix(in_srgb,var(--color-neutral-100)_60%,transparent)]">
-      <div className="tickets-grid border-b border-divider bg-neutral-200 font-data text-[10px] tracking-[0.1em] text-neutral-600">
+    <div className="tickets-grid overflow-x-auto border border-divider bg-[color-mix(in_srgb,var(--color-neutral-100)_60%,transparent)]">
+      <div className="tickets-row border-b border-divider bg-neutral-200 font-data text-[10px] tracking-[0.1em] text-neutral-600">
         <div className="px-3.5 py-2">TICKET</div>
         <div className="px-3.5 py-2">ACCOUNT</div>
         <div className="px-3.5 py-2">ACTION</div>
         <div className="px-3.5 py-2">PIPELINE</div>
-        <div className="px-3.5 py-2 text-right">AGE</div>
+        <div className="px-3.5 py-2 pr-6 text-right">AGE</div>
       </div>
       {tickets.length === 0 && (
-        <div className="px-3.5 py-8 text-center font-data text-sm text-neutral-500">
+        <div className="col-span-full px-3.5 py-8 text-center font-data text-sm text-neutral-500">
           No tickets match these filters.
         </div>
       )}
@@ -34,7 +34,7 @@ export function TicketsTable({ tickets }: { tickets: Ticket[] }) {
           <Link
             key={ticket.id}
             href={`/tickets/${ticket.id}`}
-            className="tickets-grid cursor-pointer border-b border-divider text-text last:border-b-0 hover:bg-[color-mix(in_srgb,var(--color-text)_4%,transparent)] hover:text-text"
+            className="tickets-row cursor-pointer border-b border-divider text-text last:border-b-0 hover:bg-[color-mix(in_srgb,var(--color-text)_4%,transparent)] hover:text-text"
             style={
               hold
                 ? {
@@ -57,7 +57,7 @@ export function TicketsTable({ tickets }: { tickets: Ticket[] }) {
             <div className="flex items-center px-3.5 py-[13px]">
               <PipelineTrack status={ticket.status} pulseDelay={`${(i * 0.31).toFixed(2)}s`} />
             </div>
-            <div className="px-3.5 py-[13px] text-right font-data text-[12px] text-neutral-600">
+            <div className="px-3.5 py-[13px] pr-6 text-right font-data text-[12px] text-neutral-600">
               <Age fromIso={ticket.created_at} />
             </div>
           </Link>

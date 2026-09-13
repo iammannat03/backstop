@@ -34,7 +34,7 @@ export interface TicketListResult {
 export async function getTickets(filters: TicketListFilters = {}): Promise<TicketListResult> {
   const { q, customerId, status = "all", actionType = "all", dateFrom, dateTo } = filters;
   const page = Math.max(1, filters.page ?? 1);
-  const pageSize = filters.pageSize ?? 25;
+  const pageSize = filters.pageSize ?? 8;
 
   // needs_review mirrors isHold()'s escalated+blocked. in_progress excludes
   // both terminal and hold states, i.e. still actively moving.
@@ -181,9 +181,10 @@ export async function getAuditTrail(ticketId: string): Promise<AuditRecord[]> {
 /**
  * A human approving or overriding a flagged action. "hold" just logs the
  * decision and leaves the ticket escalated. "approve_worker" / "approve_verifier"
- * execute the chosen ProposedAction directly and move the ticket to a
- * terminal status. Deliberately doesn't write back to Zendesk or Slack,
- * unlike the automated path.
+ * execute the chosen ProposedAction directly (Postgres and Stripe, right
+ * here), then notifyHumanDecision() below hands off to the Python ingestion
+ * service for the actual Slack post and Zendesk write-back, since that
+ * process is the only one that should own the shared OAuth token manager.
  */
 export async function recordHumanDecision(
   ticketId: string,
