@@ -4,14 +4,8 @@ import data.backstop.governance.blocked_patterns
 import data.backstop.governance.escalation_rules
 import data.backstop.governance.refund_limits
 
-# Decision precedence:
-#   1. blocked_patterns / refund_limits violations -> "deny"     (hard boundary, never allowed)
-#   2. escalation_rules flags (no hard violation)   -> "escalate" (needs a human, not a violation)
-#   3. otherwise                                    -> "allow"
-#
-# OPA never makes a judgment call here, every branch above is a deterministic threshold
-# or list-membership check. See docs/rules.md for why "deny" and "escalate" both route to
-# human escalation and skip the verifier, while only "allow" continues to it.
+# Precedence: deny (hard violation) > escalate (soft flag) > allow.
+# Only "allow" continues to the verifier; deny/escalate both go straight to a human.
 
 hard_violations := sort(array.concat(
 	[v | some v in blocked_patterns.violation],
@@ -41,8 +35,7 @@ reason := hard_violations[0].reason if decision == "deny"
 
 reason := escalation_flags[0].reason if decision == "escalate"
 
-# every rule that fired, not just the first, kept for the audit trail so a ticket
-# blocked for one reason doesn't hide that it also tripped a second, unrelated rule.
+# Every rule that fired, not just the first (matched_rule), for the audit trail.
 all_matched_rules := array.concat(
 	[v.rule | some v in hard_violations],
 	[f.rule | some f in escalation_flags],

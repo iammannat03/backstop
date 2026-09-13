@@ -32,13 +32,8 @@ flag contains {"rule": "escalation_rules.high_value_transaction", "reason": reas
 	)
 }
 
-# Fail-safe, not a business rule about refunds specifically: if action_type is
-# something no other policy file has an explicit opinion on, OPA's default
-# decision is "allow" (main.rego), that's the wrong default for an action type
-# nobody has reviewed the risk shape of yet. This flag turns "unrecognized" into
-# "escalate" by construction, so a new action_type is safe-by-default the moment
-# it's added to the worker's vocabulary, even before policy authors get around
-# to writing a dedicated rule for it.
+# Fail-safe: an action_type no other policy has an opinion on escalates
+# instead of silently falling through to the "allow" default.
 flag contains {"rule": "escalation_rules.unrecognized_action_type", "reason": reason} if {
 	not input.action.action_type in policy_data.known_action_types
 	reason := sprintf(
@@ -47,9 +42,7 @@ flag contains {"rule": "escalation_rules.unrecognized_action_type", "reason": re
 	)
 }
 
-# flag_for_fraud_review is categorical: a human/fraud team must always see this,
-# regardless of the worker's confidence. Unlike ambiguous_intent below, there is
-# no confidence level at which auto-proceeding on a fraud signal is acceptable.
+# Categorical: always escalates regardless of confidence.
 flag contains {"rule": "escalation_rules.fraud_review_requested", "reason": "Ticket flagged for fraud review, always routed to a human, regardless of confidence."} if {
 	input.action.action_type == "flag_for_fraud_review"
 }

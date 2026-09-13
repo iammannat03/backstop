@@ -14,27 +14,19 @@ class Ticket(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     zendesk_ticket_id: Mapped[str] = mapped_column(String, unique=True, index=True)
 
-    # customer_id is the Stripe customer id (cus_...), unknown at ingestion time, resolved
-    # and filled in by the worker agent's Stripe Investigator (phase 4) via customer_email
-    # lookup. customer_email is what ingestion actually has from the Zendesk requester.
+    # Stripe customer id, resolved later by the worker agent via customer_email.
     customer_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     customer_email: Mapped[str] = mapped_column(String, index=True)
     ticket_text: Mapped[str] = mapped_column(Text)
 
-    # Lifecycle status, see docs/architecture.md section 5 (state diagram) for the full enum:
-    # new, investigating, proposed_action, opa_review, blocked, verifier_review,
-    # escalated, executing, executed, human_review, resolved
+    # Lifecycle status, see docs/architecture.md section 5 for the full enum.
     status: Mapped[str] = mapped_column(String, default="new", index=True)
 
     classification: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     stripe_context: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     proposed_action: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    # Set the first time any audit Slack message is posted for this ticket
-    # (audit/slack_notifier.py); every later post for the same ticket replies
-    # into this thread instead of starting a new top-level message, which is
-    # what lets a human reply "@backstop <action>" in-thread and have
-    # audit/slack_commands.py resolve it back to this ticket.
+    # Set on the first Slack post for this ticket, later posts reply into the thread.
     slack_channel: Mapped[str | None] = mapped_column(String, nullable=True)
     slack_thread_ts: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
 
@@ -78,8 +70,7 @@ class VerificationResult(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     final_decision: Mapped[str | None] = mapped_column(String, nullable=True)  # execute / escalate
 
-    # Verifier's own independently re-pulled Stripe/ticket data, kept for audit;
-    # proves the re-derivation actually happened rather than trusting the worker's summary
+    # Verifier's own independently re-pulled Stripe/ticket data.
     raw_verification_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -93,9 +84,7 @@ class AuditRecord(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     ticket_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tickets.id"), index=True)
 
-    # One row per decision-chain event (e.g. proposed_action, policy_decision,
-    # verification_result, executed, escalated) rather than one growing blob per ticket,
-    # see docs/rules.md for why.
+    # Append-only: one row per decision-chain event, not one blob per ticket.
     event_type: Mapped[str] = mapped_column(String, index=True)
     actor: Mapped[str] = mapped_column(String)  # worker_agent / opa / verifier_agent / stripe_executor / human
     detail: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

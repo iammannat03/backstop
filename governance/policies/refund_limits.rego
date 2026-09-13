@@ -26,9 +26,7 @@ violation contains {"rule": "refund_limits.monthly_refund_cap_exceeded", "reason
 	)
 }
 
-# Same shape as max_single_refund_exceeded above, applied to apply_account_credit
-# instead. A goodwill credit is still money leaving the business, just via a
-# different Stripe mechanism, so it gets the same kind of hard dollar cap.
+# Same cap as max_single_refund_exceeded, applied to account credit instead.
 violation contains {"rule": "refund_limits.max_account_credit_exceeded", "reason": reason} if {
 	input.action.action_type == "apply_account_credit"
 	currency := input.action.currency

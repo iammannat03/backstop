@@ -7,10 +7,7 @@ from persistence import models  # noqa: F401 (registers models on Base.metadata)
 def init_db():
     Base.metadata.create_all(bind=engine)
 
-    # create_all only creates missing tables, not missing columns on an
-    # existing one. The Slack-command feature added slack_channel/
-    # slack_thread_ts to an already-deployed tickets table, so patch those in
-    # directly rather than pulling in a full migration tool for one column pair.
+    # create_all skips columns added to an already-deployed table, patch those in.
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS slack_channel VARCHAR"))
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS slack_thread_ts VARCHAR"))

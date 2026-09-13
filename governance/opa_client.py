@@ -1,11 +1,5 @@
-"""Python glue for the OPA policy gate built in phase 2 (governance/*.rego,
-verified via `opa test`, 11/11 passing). Not part of architecture.md's listed
-governance/ files, but necessary: the Rego policies can't call themselves,
-something has to hand them a `ProposedAction` and read back the decision.
-
-Runs `opa eval` as an async subprocess rather than a blocking call, consistent
-with the rest of the pipeline: even though the call itself is fast, this still
-yields control back to the event loop for other tickets' concurrent processing.
+"""Python glue for the OPA policy gate. Runs `opa eval` as an async subprocess
+so it yields control back to the event loop for other tickets' processing.
 """
 
 import asyncio
@@ -29,13 +23,7 @@ def build_opa_input(
     transaction: Transaction | None,
     subscription: Subscription | None,
 ) -> dict:
-    """Assembles the `input` document OPA's rules expect (docs/rules.md's "OPA
-    policy input schema" section) from a ProposedAction plus the customer/
-    transaction/subscription facts it needs to check against. Shared by
-    verifier_agent/pipeline.py (auto-pipeline) and command_agent/pipeline.py
-    (human `@backstop` commands), both hand OPA the same fact shape regardless
-    of who proposed the action, since OPA's deterministic limits apply
-    identically either way."""
+    """Assembles the `input` document OPA's rules expect."""
     return {
         "action": {
             "action_type": action.action_type,
