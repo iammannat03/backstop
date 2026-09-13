@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# uv
+# (uv.lock should be committed, don't ignore it)
+
+# Environment
+.env
+.env.*
+.zendesk_oauth_cache.json
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Docker
+*.log
+
+# Postgres data (in case anything gets mounted locally instead of a named volume)
+pgdata/
+
+# Test artifacts
+.pytest_cache/

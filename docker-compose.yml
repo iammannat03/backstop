@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: backstop-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: backstop
+      POSTGRES_PASSWORD: backstop_dev_pw
+      POSTGRES_DB: backstop
+    ports:
+      - "5433:5432"
+    volumes:
+      - backstop_pgdata:/var/lib/postgresql/data
+volumes:
+  backstop_pgdata:
