@@ -37,6 +37,7 @@ from shared.zendesk_auth import (
     token_manager,
     zendesk_configured,
 )
+from verifier_agent.pipeline import run_verification_pipeline
 from worker_agent.pipeline import run_worker_pipeline
 
 load_dotenv()
@@ -62,11 +63,13 @@ async def _already_ingested(zendesk_ticket_id: str) -> bool:
         return existing is not None
 
 
-async def _run_worker(ticket_id) -> None:
+async def _run_full_pipeline(ticket_id) -> None:
+    """Worker then verifier, as one detached asyncio task per ticket."""
     try:
-        await run_worker_pipeline(ticket_id)
+        proposed = await run_worker_pipeline(ticket_id)
+        await run_verification_pipeline(ticket_id, proposed)
     except Exception:
-        logger.exception("Worker pipeline failed for ticket %s", ticket_id)
+        logger.exception("Pipeline failed for ticket %s", ticket_id)
 
 
 async def process_ticket(raw_ticket: dict, client: httpx.AsyncClient) -> None:
@@ -97,7 +100,7 @@ async def process_ticket(raw_ticket: dict, client: httpx.AsyncClient) -> None:
             db.commit()
             logger.info("Ingested ticket %s (customer=%s)", zendesk_ticket_id, email)
 
-        asyncio.create_task(_run_worker(ticket_id))
+        asyncio.create_task(_run_full_pipeline(ticket_id))
     except Exception:
         logger.exception("Failed to ingest ticket %s", zendesk_ticket_id)
 
