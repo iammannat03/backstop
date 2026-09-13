@@ -7,6 +7,7 @@ consistency_checker): worker action -> OPA -> [deny/escalate -> human] or
 import logging
 import uuid
 
+from execution.stripe_executor import execute_action
 from governance.opa_client import build_opa_input, evaluate_policy
 from persistence.db import SessionLocal
 from persistence.models import AuditRecord, PolicyDecision, Ticket
@@ -124,8 +125,9 @@ async def run_verification_pipeline(ticket_id: uuid.UUID, worker_action: Propose
         )
         _set_status(ticket_id, "escalated")
     elif verification.consistent:
-        logger.info("Ticket %s verified consistent, ready to execute", ticket_id)
+        logger.info("Ticket %s verified consistent, executing", ticket_id)
         _set_status(ticket_id, "executing")
+        await execute_action(ticket_id, worker_action)
     else:
         logger.info("Ticket %s verification mismatch (%s), escalating", ticket_id, verification.mismatch_type)
         _set_status(ticket_id, "escalated")
