@@ -151,3 +151,32 @@ async def notify_execution_failed(ticket_id: uuid.UUID, error_detail: str) -> No
         _text_block("Stripe error", error_detail),
     ]
     await _post(ticket_id, blocks, f"Execution failed for ticket #{summary['zendesk_ticket_id']}")
+
+
+async def notify_command_blocked(
+    ticket_id: uuid.UUID, command_text: str, matched_rule: str | None, reason: str | None
+) -> None:
+    """Reply for a human's `@backstop <command>` that OPA denied."""
+    summary = _load_ticket_summary(ticket_id)
+    blocks = [
+        _header("\U0001F6AB", "Command blocked by policy"),
+        _fields(summary, {"Command": command_text, "Matched rule": matched_rule or "unknown"}),
+        _text_block("Reason", reason or "no reason provided"),
+    ]
+    await _post(
+        ticket_id, blocks, f"Command blocked on ticket #{summary['zendesk_ticket_id']}: {matched_rule}"
+    )
+
+
+async def notify_command_needs_clarification(ticket_id: uuid.UUID, command_text: str, rationale: str) -> None:
+    """The command parser couldn't ground the human's instruction in a
+    concrete, executable action."""
+    summary = _load_ticket_summary(ticket_id)
+    blocks = [
+        _header("❓", "Command needs clarification"),
+        _fields(summary, {"Command": command_text}),
+        _text_block("Why", rationale),
+    ]
+    await _post(
+        ticket_id, blocks, f"Command needs clarification on ticket #{summary['zendesk_ticket_id']}"
+    )

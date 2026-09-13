@@ -37,6 +37,7 @@ from shared.zendesk_auth import (
     token_manager,
     zendesk_configured,
 )
+from audit.slack_commands import router as slack_commands_router
 from verifier_agent.pipeline import run_verification_pipeline
 from worker_agent.pipeline import run_worker_pipeline
 
@@ -193,6 +194,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Backstop Ingestion", lifespan=lifespan)
+# Slack Events API endpoint for the @backstop in-thread command feature.
+app.include_router(slack_commands_router)
 
 
 @app.get("/health")
