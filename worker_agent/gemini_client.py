@@ -17,10 +17,12 @@ GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 # "-latest" aliases rather than a pinned dated version, so the model doesn't
 # disappear out from under a running key.
-# REASONING_MODEL runs on the same lite tier as the classifier: gemini-flash-latest
-# is currently unavailable (sustained 503s, confirmed live), not a transient blip.
 CLASSIFIER_MODEL = os.getenv("GEMINI_CLASSIFIER_MODEL", "gemini-flash-lite-latest")
 REASONING_MODEL = os.getenv("GEMINI_REASONING_MODEL", "gemini-flash-lite-latest")
+# Verifier runs on the full flash tier, not lite, so it's a genuinely
+# different model from the worker's reasoning engine, not just a second call
+# to the same one.
+VERIFIER_MODEL = os.getenv("GEMINI_VERIFIER_MODEL", "gemini-flash-latest")
 
 # Bumped after a real sustained 503 "high demand" window during testing: 3
 # attempts at 2s wasn't always enough to ride it out.

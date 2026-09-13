@@ -13,7 +13,7 @@ from persistence.db import SessionLocal
 from persistence.models import Ticket
 from shared.action_types import ACTION_TYPE_VALUES
 from shared.models import ProposedAction, StripeHistory
-from worker_agent.gemini_client import REASONING_MODEL, generate_json
+from worker_agent.gemini_client import VERIFIER_MODEL, generate_json
 from worker_agent.stripe_investigator import investigate_customer
 
 _SCHEMA = {
@@ -125,7 +125,7 @@ async def _derive_independent_conclusion(
     result = await generate_json(
         prompt=_format_prompt(ticket_text, stripe_history, ticket_count_last_90_days),
         schema=_SCHEMA,
-        model=REASONING_MODEL,
+        model=VERIFIER_MODEL,
         system_instruction=_SYSTEM_INSTRUCTION,
     )
     if not result.get("target_transaction_id"):
