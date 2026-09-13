@@ -137,6 +137,10 @@ class ZendeskPoller:
             self._cursor = data["after_cursor"]
 
             for raw_ticket in data.get("tickets", []):
+                # Zendesk's incremental export includes deleted tickets in the
+                # stream (a deletion counts as an update), never treat one as new.
+                if raw_ticket.get("status") == "deleted":
+                    continue
                 if await _already_ingested(str(raw_ticket["id"])):
                     continue
                 asyncio.create_task(process_ticket(raw_ticket, self._client))
