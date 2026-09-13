@@ -37,6 +37,7 @@ from shared.zendesk_auth import (
     token_manager,
     zendesk_configured,
 )
+from worker_agent.pipeline import run_worker_pipeline
 
 load_dotenv()
 
@@ -61,8 +62,15 @@ async def _already_ingested(zendesk_ticket_id: str) -> bool:
         return existing is not None
 
 
+async def _run_worker(ticket_id) -> None:
+    try:
+        await run_worker_pipeline(ticket_id)
+    except Exception:
+        logger.exception("Worker pipeline failed for ticket %s", ticket_id)
+
+
 async def process_ticket(raw_ticket: dict, client: httpx.AsyncClient) -> None:
-    """Persists the raw ticket and logs the ingestion audit event."""
+    """Persists the raw ticket, then dispatches the worker pipeline as its own task."""
     zendesk_ticket_id = str(raw_ticket["id"])
     try:
         email = await fetch_requester_email(client, raw_ticket["requester_id"])
@@ -88,6 +96,8 @@ async def process_ticket(raw_ticket: dict, client: httpx.AsyncClient) -> None:
             )
             db.commit()
             logger.info("Ingested ticket %s (customer=%s)", zendesk_ticket_id, email)
+
+        asyncio.create_task(_run_worker(ticket_id))
     except Exception:
         logger.exception("Failed to ingest ticket %s", zendesk_ticket_id)
 
