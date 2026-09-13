@@ -78,6 +78,10 @@ class ProposedAction(BaseModel):
     target_subscription_id: str | None = None
     rationale: str
     confidence: float = Field(ge=0.0, le=1.0)
+    # Only ever set by a human @backstop command that specifies exact wording
+    # or tone for the customer; overrides the default resolution message when
+    # execution writes back to Zendesk. Never set by the worker or verifier.
+    customer_message: str | None = None
 
 
 class VerificationResult(BaseModel):

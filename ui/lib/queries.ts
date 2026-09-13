@@ -212,9 +212,11 @@ export async function recordHumanDecision(
       const refund = await issueRefund(ticketId, chosenAction.target_transaction_id, chosenAction.amount);
       await markResolved();
       await insertAuditRecord(ticketId, "executed", "human", { refund_id: refund.id, ...chosenAction });
+      await notifyHumanDecision(ticketId, { outcome: "resolved", action: chosenAction, refundId: refund.id });
       return { status: "resolved", refundId: refund.id };
     } catch (err) {
       await insertAuditRecord(ticketId, "execution_failed", "human", { error: String(err) });
+      await notifyHumanDecision(ticketId, { outcome: "failed", errorDetail: String(err) });
       return { status: "escalated", error: String(err) };
     }
   }
@@ -227,9 +229,11 @@ export async function recordHumanDecision(
       await cancelSubscription(ticketId, chosenAction.target_subscription_id);
       await markResolved();
       await insertAuditRecord(ticketId, "executed", "human", { ...chosenAction });
+      await notifyHumanDecision(ticketId, { outcome: "resolved", action: chosenAction });
       return { status: "resolved" };
     } catch (err) {
       await insertAuditRecord(ticketId, "execution_failed", "human", { error: String(err) });
+      await notifyHumanDecision(ticketId, { outcome: "failed", errorDetail: String(err) });
       return { status: "escalated", error: String(err) };
     }
   }
@@ -243,9 +247,11 @@ export async function recordHumanDecision(
       await applyAccountCredit(ticketId, ticket.customer_id, chosenAction.amount, chosenAction.currency);
       await markResolved();
       await insertAuditRecord(ticketId, "executed", "human", { ...chosenAction });
+      await notifyHumanDecision(ticketId, { outcome: "resolved", action: chosenAction });
       return { status: "resolved" };
     } catch (err) {
       await insertAuditRecord(ticketId, "execution_failed", "human", { error: String(err) });
+      await notifyHumanDecision(ticketId, { outcome: "failed", errorDetail: String(err) });
       return { status: "escalated", error: String(err) };
     }
   }
@@ -253,5 +259,35 @@ export async function recordHumanDecision(
   // no_action / escalate / flag_for_fraud_review: the human already is the
   // reviewer at this point, nothing left to move.
   await markResolved();
+  await notifyHumanDecision(ticketId, { outcome: "resolved", action: chosenAction });
   return { status: "resolved" };
+}
+
+// Calls into the Python ingestion service so the actual Slack post and
+// Zendesk write-back go through the one process that owns the shared OAuth
+// token manager. This UI process never talks to Zendesk directly.
+const INGESTION_URL = process.env.INGESTION_URL ?? "http://localhost:8001";
+
+async function notifyHumanDecision(
+  ticketId: string,
+  params: { outcome: "resolved" | "failed"; action?: ProposedAction; refundId?: string; errorDetail?: string },
+): Promise<void> {
+  try {
+    const res = await fetch(`${INGESTION_URL}/ingest/human-decision-notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ticket_id: ticketId,
+        outcome: params.outcome,
+        action: params.action ?? null,
+        refund_id: params.refundId ?? null,
+        error_detail: params.errorDetail ?? null,
+      }),
+    });
+    if (!res.ok) {
+      console.error("human-decision-notify failed:", res.status, await res.text());
+    }
+  } catch (err) {
+    console.error("Could not reach ingestion service for human-decision-notify:", err);
+  }
 }

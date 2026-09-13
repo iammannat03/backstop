@@ -95,13 +95,25 @@ def _load_zendesk_ticket_id(ticket_id: uuid.UUID) -> str | None:
         return ticket.zendesk_ticket_id if ticket else None
 
 
-def _customer_facing_resolution_message(action: ProposedAction) -> str:
+def customer_facing_resolution_message(action: ProposedAction) -> str:
+    # A human @backstop command can dictate the exact customer-facing wording;
+    # the worker and verifier never set this, so it's always a human's choice.
+    if action.customer_message:
+        return action.customer_message
     if action.action_type in ("refund", "partial_refund"):
         return f"We've reviewed your account and issued a refund of ${action.amount / 100:.2f} for this charge."
     if action.action_type == "cancel_subscription":
         return "Your subscription has been cancelled as requested."
     if action.action_type == "apply_account_credit":
         return f"We've applied a ${action.amount / 100:.2f} credit to your account balance."
+    if action.action_type == "flag_for_fraud_review":
+        # Must never claim "no action needed" or otherwise confirm/deny
+        # anything, this is a security matter for a human to handle, not
+        # something the customer should be told is already resolved.
+        return (
+            "Thank you for reaching out. We've flagged this for review by our security team, "
+            "and will follow up separately if we need any additional information from you."
+        )
     # "no_action" covers both a charge that turned out to be correct and a
     # ticket that was never about billing at all, so this stays generic.
     return "Thanks for reaching out. After review, no billing action was needed on this ticket."
@@ -114,7 +126,7 @@ async def _close_out(ticket_id: uuid.UUID, action: ProposedAction, refund_id: st
         ticket_id, action.action_type, action.amount, action.currency, action.rationale, refund_id
     )
     if zendesk_ticket_id:
-        await mark_resolved(zendesk_ticket_id, _customer_facing_resolution_message(action))
+        await mark_resolved(zendesk_ticket_id, customer_facing_resolution_message(action))
 
 
 async def _fail_out(ticket_id: uuid.UUID, error_detail: str) -> None:

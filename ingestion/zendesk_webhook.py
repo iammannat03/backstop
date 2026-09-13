@@ -12,7 +12,9 @@ import logging
 import os
 import secrets
 import time
+import uuid
 from contextlib import asynccontextmanager
+from typing import Literal
 from urllib.parse import urlencode
 
 import httpx
@@ -24,6 +26,7 @@ from sqlalchemy import select
 
 from persistence.db import SessionLocal
 from persistence.models import AuditRecord, Ticket
+from shared.models import ProposedAction
 from shared.zendesk_auth import (
     BASE_URL,
     OAUTH_AUTHORIZE_URL,
@@ -38,6 +41,9 @@ from shared.zendesk_auth import (
     zendesk_configured,
 )
 from audit.slack_commands import router as slack_commands_router
+from audit.slack_notifier import notify_executed, notify_execution_failed
+from audit.zendesk_updater import mark_escalated, mark_resolved
+from execution.stripe_executor import customer_facing_resolution_message
 from verifier_agent.pipeline import run_verification_pipeline
 from worker_agent.pipeline import run_worker_pipeline
 
@@ -328,3 +334,47 @@ async def poll_now():
         return {"dispatched": dispatched}
     except httpx.HTTPStatusError as e:
         return {"error": f"Zendesk API error {e.response.status_code}: {e.response.text}"}
+
+
+class HumanDecisionNotify(BaseModel):
+    ticket_id: str
+    outcome: Literal["resolved", "failed"]
+    action: ProposedAction | None = None
+    refund_id: str | None = None
+    error_detail: str | None = None
+
+
+@app.post("/ingest/human-decision-notify")
+async def human_decision_notify(payload: HumanDecisionNotify):
+    """The control-room UI's approve/override/acknowledge buttons write to
+    Postgres and Stripe directly (no Zendesk token manager there), then call
+    this endpoint so the actual Slack post and Zendesk write-back still go
+    through the one process that owns the shared OAuth token manager."""
+    ticket_id = uuid.UUID(payload.ticket_id)
+    with SessionLocal() as db:
+        ticket = db.get(Ticket, ticket_id)
+        if ticket is None:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        zendesk_ticket_id = ticket.zendesk_ticket_id
+
+    if payload.outcome == "resolved":
+        if payload.action is None:
+            raise HTTPException(status_code=400, detail="action is required when outcome is 'resolved'")
+        await notify_executed(
+            ticket_id,
+            payload.action.action_type,
+            payload.action.amount,
+            payload.action.currency,
+            payload.action.rationale,
+            payload.refund_id,
+        )
+        if zendesk_ticket_id:
+            await mark_resolved(zendesk_ticket_id, customer_facing_resolution_message(payload.action))
+    else:
+        await notify_execution_failed(ticket_id, payload.error_detail or "Human decision execution failed")
+        if zendesk_ticket_id:
+            await mark_escalated(
+                zendesk_ticket_id,
+                f"Human-approved action failed and needs manual handling: {payload.error_detail}",
+            )
+    return {"ok": True}

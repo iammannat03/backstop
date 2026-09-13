@@ -31,6 +31,7 @@ export interface ProposedAction {
   target_subscription_id: string | null;
   rationale: string;
   confidence: number;
+  customer_message?: string | null;
 }
 
 export interface Classification {

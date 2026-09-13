@@ -16,6 +16,7 @@ _SCHEMA = {
         "target_transaction_id": {"type": "STRING"},
         "target_subscription_id": {"type": "STRING"},
         "rationale": {"type": "STRING"},
+        "customer_message": {"type": "STRING"},
     },
     "required": [
         "action_type",
@@ -24,6 +25,7 @@ _SCHEMA = {
         "target_transaction_id",
         "target_subscription_id",
         "rationale",
+        "customer_message",
     ],
 }
 
@@ -43,15 +45,33 @@ with a rationale explaining the ambiguity, do not guess.
 refundable amount.
 - Only set target_subscription_id to a subscription id that actually appears in the provided subscriptions \
 list, same rule as above, never invent one.
-- If the command doesn't map to any of the known action types, or is too vague to act on safely (e.g. "look \
-into this" with no concrete action), propose "escalate" with a rationale explaining why.
+- If the command is purely about communicating with the customer (e.g. "let them know...", "send them a \
+message...", "explain to them...", "tell them what happened") and does not specify a concrete billing action \
+(a refund, credit, cancellation, or fraud flag), that is NOT vague, it is a valid instruction: propose \
+action_type "no_action" and write the actual message to send in customer_message, in the tone/content the \
+human asked for. Ground it strictly in what the real Stripe billing history and ticket actually show (e.g. if \
+the charge is a legitimate proration, explain that plainly); never invent a claim the data doesn't support.
+- If the command doesn't map to any of the known action types, or is too vague to act on safely at all (e.g. \
+"look into this" with no concrete action and no request to just message the customer), propose "escalate" \
+with a rationale explaining why.
 - amount is integer cents, 0 unless action_type is refund/partial_refund/apply_account_credit. currency \
 defaults to the transaction's own currency, or "usd" if there's no target transaction.
 - rationale should state what the human asked for and how you mapped it to the structured action (1-3 \
 sentences), this is shown back to the human as confirmation of what's about to execute.
+- customer_message: leave empty unless the human's command specifies particular wording, tone, or content for \
+what the customer should be told, in which case write that exact customer-facing message here (grounded in \
+the real outcome, never fabricating facts). Never used for OPA or the audit trail's internal reasoning. This \
+is a one-shot ticket resolution comment, not a live chat: state the outcome plainly and stop. Do not add a \
+generic conversational closer like "please let us know if you have any further questions" or "feel free to \
+reach out". Never include an internal identifier (a Stripe id like ch_..., sub_..., or cus_...) in this \
+message, a customer has no use for it; refer to a charge by its date and amount instead. Always state the \
+concrete outcome plainly alongside the explanation: say explicitly whether a refund was issued (and how much), \
+no refund is being issued, a credit was applied (and how much), or the subscription was cancelled, matching \
+the actual action_type, rather than only explaining the reasoning and leaving the outcome implied.
 
 Output: action_type, amount, currency, target_transaction_id (empty string if not applicable), \
-target_subscription_id (empty string if not applicable), rationale."""
+target_subscription_id (empty string if not applicable), rationale, customer_message (empty string if not \
+applicable)."""
 
 
 def _format_prompt(command_text: str, ticket_text: str, stripe_history: StripeHistory) -> str:
@@ -68,7 +88,12 @@ async def parse_command(command_text: str, ticket_text: str, stripe_history: Str
         schema=_SCHEMA,
         model=REASONING_MODEL,
         system_instruction=_SYSTEM_INSTRUCTION,
+        # An explicit human instruction should be transcribed the same way
+        # every time, not sampled with the usual reasoning-task randomness.
+        temperature=0,
     )
+    if not result.get("customer_message"):
+        result["customer_message"] = None
     if not result.get("target_transaction_id"):
         result["target_transaction_id"] = None
     if not result.get("target_subscription_id"):

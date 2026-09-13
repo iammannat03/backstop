@@ -34,18 +34,23 @@ async def generate_json(
     schema: dict,
     model: str,
     system_instruction: str | None = None,
+    temperature: float | None = None,
 ) -> dict:
     """Calls generateContent with a JSON response schema, returns the parsed
     dict. Retries on transient errors, fails fast on anything else."""
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY not set in .env")
 
+    generation_config = {
+        "responseMimeType": "application/json",
+        "responseSchema": schema,
+    }
+    if temperature is not None:
+        generation_config["temperature"] = temperature
+
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": schema,
-        },
+        "generationConfig": generation_config,
     }
     if system_instruction:
         body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
