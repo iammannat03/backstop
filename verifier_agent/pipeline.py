@@ -7,6 +7,8 @@ consistency_checker): worker action -> OPA -> [deny/escalate -> human] or
 import logging
 import uuid
 
+from audit.slack_notifier import notify_blocked, notify_escalated
+from audit.zendesk_updater import mark_escalated
 from execution.stripe_executor import execute_action
 from governance.opa_client import build_opa_input, evaluate_policy
 from persistence.db import SessionLocal
@@ -96,6 +98,12 @@ async def run_verification_pipeline(ticket_id: uuid.UUID, worker_action: Propose
             {"decision": policy_result["decision"], "matched_rule": policy_result["matched_rule"], "reason": policy_result["reason"]},
         )
         _set_status(ticket_id, "escalated")
+        await notify_blocked(ticket_id, policy_result["matched_rule"], policy_result["reason"])
+        if zendesk_ticket_id:
+            await mark_escalated(
+                zendesk_ticket_id,
+                f"Blocked by policy ({policy_result['matched_rule']}): {policy_result['reason']}",
+            )
         return
 
     _set_status(ticket_id, "verifier_review")
@@ -124,6 +132,17 @@ async def run_verification_pipeline(ticket_id: uuid.UUID, worker_action: Propose
             "Ticket %s: worker and verifier agree on %s, routing to human", ticket_id, worker_action.action_type
         )
         _set_status(ticket_id, "escalated")
+        await notify_escalated(
+            ticket_id,
+            f"agreed_{worker_action.action_type}",
+            verification.notes,
+            worker_action.rationale,
+            verification.verifier_rationale,
+            header="Escalated: needs human review",
+            field_label="Reason",
+        )
+        if zendesk_ticket_id:
+            await mark_escalated(zendesk_ticket_id, f"Escalated for human review: {verification.notes}")
     elif verification.consistent:
         logger.info("Ticket %s verified consistent, executing", ticket_id)
         _set_status(ticket_id, "executing")
@@ -131,3 +150,12 @@ async def run_verification_pipeline(ticket_id: uuid.UUID, worker_action: Propose
     else:
         logger.info("Ticket %s verification mismatch (%s), escalating", ticket_id, verification.mismatch_type)
         _set_status(ticket_id, "escalated")
+        await notify_escalated(
+            ticket_id,
+            verification.mismatch_type,
+            verification.notes,
+            worker_action.rationale,
+            verification.verifier_rationale,
+        )
+        if zendesk_ticket_id:
+            await mark_escalated(zendesk_ticket_id, f"Verifier flagged a mismatch: {verification.notes}")
