@@ -1,0 +1,17 @@
+version = 0.1
+
+[default]
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.deploy.parameters]
+stack_name = "backstop-local"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+resolve_s3 = false
+s3_bucket = "backstop-sam-local"
+parameter_overrides = "Stage=local"
+
+[default.local_start_api.parameters]
+warm_containers = "EAGER"

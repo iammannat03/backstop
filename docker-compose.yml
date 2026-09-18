@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  localstack:
+    image: localstack/localstack:latest
+    container_name: backstop-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb,lambda,stepfunctions,apigateway,events,iam,sts,cloudformation,logs,s3
+      - DEBUG=0
+      - LAMBDA_EXECUTOR=docker
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - PERSISTENCE=1
+      - DEFAULT_REGION=us-east-1
+    volumes:
+      - "backstop_localstack_data:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+volumes:
+  backstop_localstack_data:

@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Backstop, ticket triage and refund automation on AWS.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures:
+      - x86_64
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        POWERTOOLS_SERVICE_NAME: backstop
+
+Parameters:
+  Stage:
+    Type: String
+    Default: local
+    AllowedValues:
+      - local
+      - dev
+      - prod
+
+Resources: {}
+# Lambda functions land here in the worker, verifier, execution, and
+# command agent phases. The state machine and its IAM role land here in
+# the orchestration phase. The DynamoDB table lands here in the
+# persistence phase. The Slack and Zendesk polling entry points land here
+# in the ingestion phase.
+
+Outputs: {}
