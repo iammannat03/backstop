@@ -17,11 +17,50 @@ Parameters:
     AllowedValues:
       - mock
       - bedrock
-    Description: mock returns fixture responses and never calls Bedrock.
+      - gemini
+    Description: mock returns fixture responses and never calls an LLM. gemini calls the Gemini API and needs GeminiApiKey.
+  GeminiApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
   StripeApiKey:
     Type: String
     Default: ""
     NoEcho: true
+  ZendeskSubdomain:
+    Type: String
+    Default: ""
+  ZendeskOauthClientId:
+    Type: String
+    Default: ""
+  ZendeskOauthClientSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+  ZendeskOauthRedirectUri:
+    Type: String
+    Default: ""
+    Description: >
+      Must equal the OAuth client's registered redirect URL, the deployed
+      HttpApiUrl output plus /oauth/callback. Known only after the first deploy.
+  SlackBotToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+  SlackSigningSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+  SlackChannelId:
+    Type: String
+    Default: ""
+  SlackBotUserId:
+    Type: String
+    Default: ""
+  SlackCommandAllowedUserIds:
+    Type: String
+    Default: ""
+    Description: Comma separated Slack user ids allowed to run @backstop commands.
 
 Globals:
   Function:
@@ -35,6 +74,7 @@ Globals:
         POWERTOOLS_SERVICE_NAME: backstop
         DYNAMODB_TABLE_NAME: !Ref BackstopTable
         LLM_CLIENT: !Ref LlmClient
+        GEMINI_API_KEY: !Ref GeminiApiKey
         STRIPE_API_KEY: !Ref StripeApiKey
 
 Resources:
@@ -43,6 +83,9 @@ Resources:
     Properties:
       TableName: !Sub backstop-${Stage}
       BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
       AttributeDefinitions:
         - AttributeName: PK
           AttributeType: S
@@ -235,6 +278,15 @@ Resources:
     Properties:
       CodeUri: .
       Handler: audit.audit_handler.lambda_handler
+      Timeout: 60
+      Environment:
+        Variables:
+          ZENDESK_SUBDOMAIN: !Ref ZendeskSubdomain
+          ZENDESK_OAUTH_CLIENT_ID: !Ref ZendeskOauthClientId
+          ZENDESK_OAUTH_CLIENT_SECRET: !Ref ZendeskOauthClientSecret
+          ZENDESK_OAUTH_REDIRECT_URI: !Ref ZendeskOauthRedirectUri
+          SLACK_BOT_TOKEN: !Ref SlackBotToken
+          SLACK_CHANNEL_ID: !Ref SlackChannelId
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BackstopTable
@@ -288,9 +340,194 @@ Resources:
         - LambdaInvokePolicy:
             FunctionName: !Ref AuditFunction
 
-# The Slack and Zendesk polling entry points land here in the ingestion phase.
+  # Ingestion. The poller runs once a minute (the scheduler minimum) and polls
+  # four times per invocation, 15 seconds apart, see ingestion/poll_handler.py.
+  PollerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: ingestion.poll_handler.lambda_handler
+      Timeout: 65
+      Environment:
+        Variables:
+          ZENDESK_SUBDOMAIN: !Ref ZendeskSubdomain
+          ZENDESK_OAUTH_CLIENT_ID: !Ref ZendeskOauthClientId
+          ZENDESK_OAUTH_CLIENT_SECRET: !Ref ZendeskOauthClientSecret
+          ZENDESK_OAUTH_REDIRECT_URI: !Ref ZendeskOauthRedirectUri
+          MAIN_PIPELINE_STATE_MACHINE_ARN: !Ref MainPipelineStateMachine
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+        - Statement:
+            - Effect: Allow
+              Action: states:StartExecution
+              Resource: !Ref MainPipelineStateMachine
+      Events:
+        EveryMinute:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 minute)
+
+  OauthAuthorizeFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: ingestion.api_handlers.oauth_authorize_handler
+      Timeout: 30
+      Environment:
+        Variables:
+          ZENDESK_SUBDOMAIN: !Ref ZendeskSubdomain
+          ZENDESK_OAUTH_CLIENT_ID: !Ref ZendeskOauthClientId
+          ZENDESK_OAUTH_CLIENT_SECRET: !Ref ZendeskOauthClientSecret
+          ZENDESK_OAUTH_REDIRECT_URI: !Ref ZendeskOauthRedirectUri
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+      Events:
+        Authorize:
+          Type: HttpApi
+          Properties:
+            Path: /oauth/authorize
+            Method: GET
+
+  OauthCallbackFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: ingestion.api_handlers.oauth_callback_handler
+      Timeout: 30
+      Environment:
+        Variables:
+          ZENDESK_SUBDOMAIN: !Ref ZendeskSubdomain
+          ZENDESK_OAUTH_CLIENT_ID: !Ref ZendeskOauthClientId
+          ZENDESK_OAUTH_CLIENT_SECRET: !Ref ZendeskOauthClientSecret
+          ZENDESK_OAUTH_REDIRECT_URI: !Ref ZendeskOauthRedirectUri
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+      Events:
+        Callback:
+          Type: HttpApi
+          Properties:
+            Path: /oauth/callback
+            Method: GET
+
+  SubmitTicketFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: ingestion.api_handlers.submit_ticket_handler
+      Timeout: 30
+      Environment:
+        Variables:
+          ZENDESK_SUBDOMAIN: !Ref ZendeskSubdomain
+          ZENDESK_OAUTH_CLIENT_ID: !Ref ZendeskOauthClientId
+          ZENDESK_OAUTH_CLIENT_SECRET: !Ref ZendeskOauthClientSecret
+          ZENDESK_OAUTH_REDIRECT_URI: !Ref ZendeskOauthRedirectUri
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+      Events:
+        SubmitTicket:
+          Type: HttpApi
+          Properties:
+            Path: /ingest/submit-ticket
+            Method: POST
+
+  PollNowFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: ingestion.api_handlers.poll_now_handler
+      Timeout: 29
+      Environment:
+        Variables:
+          ZENDESK_SUBDOMAIN: !Ref ZendeskSubdomain
+          ZENDESK_OAUTH_CLIENT_ID: !Ref ZendeskOauthClientId
+          ZENDESK_OAUTH_CLIENT_SECRET: !Ref ZendeskOauthClientSecret
+          ZENDESK_OAUTH_REDIRECT_URI: !Ref ZendeskOauthRedirectUri
+          MAIN_PIPELINE_STATE_MACHINE_ARN: !Ref MainPipelineStateMachine
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+        - Statement:
+            - Effect: Allow
+              Action: states:StartExecution
+              Resource: !Ref MainPipelineStateMachine
+      Events:
+        PollNow:
+          Type: HttpApi
+          Properties:
+            Path: /ingest/poll-now
+            Method: POST
+
+  HumanDecisionNotifyFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: ingestion.api_handlers.human_decision_notify_handler
+      Timeout: 30
+      Environment:
+        Variables:
+          ZENDESK_SUBDOMAIN: !Ref ZendeskSubdomain
+          ZENDESK_OAUTH_CLIENT_ID: !Ref ZendeskOauthClientId
+          ZENDESK_OAUTH_CLIENT_SECRET: !Ref ZendeskOauthClientSecret
+          ZENDESK_OAUTH_REDIRECT_URI: !Ref ZendeskOauthRedirectUri
+          SLACK_BOT_TOKEN: !Ref SlackBotToken
+          SLACK_CHANNEL_ID: !Ref SlackChannelId
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+      Events:
+        HumanDecisionNotify:
+          Type: HttpApi
+          Properties:
+            Path: /ingest/human-decision-notify
+            Method: POST
+
+  SlackEventsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: audit.slack_commands.lambda_handler
+      Timeout: 10
+      Environment:
+        Variables:
+          SLACK_SIGNING_SECRET: !Ref SlackSigningSecret
+          SLACK_BOT_USER_ID: !Ref SlackBotUserId
+          SLACK_COMMAND_ALLOWED_USER_IDS: !Ref SlackCommandAllowedUserIds
+          COMMAND_PIPELINE_STATE_MACHINE_ARN: !Ref CommandPipelineStateMachine
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+        - Statement:
+            - Effect: Allow
+              Action: states:StartExecution
+              Resource: !Ref CommandPipelineStateMachine
+      Events:
+        SlackEvents:
+          Type: HttpApi
+          Properties:
+            Path: /slack/events
+            Method: POST
 
 Outputs:
+  HttpApiUrl:
+    Value: !Sub https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com
   BackstopTableName:
     Value: !Ref BackstopTable
   MainPipelineStateMachineArn:

@@ -9,7 +9,7 @@
 # template.yaml (arm64 maps to manylinux2014_aarch64, x86_64 to
 # manylinux2014_x86_64).
 
-PACKAGES := shared persistence worker_agent governance verifier_agent execution command_agent audit
+PACKAGES := shared persistence worker_agent governance verifier_agent execution command_agent audit ingestion
 WHEEL_PLATFORM ?= manylinux2014_aarch64
 
 build-%:

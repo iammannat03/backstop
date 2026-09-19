@@ -9,6 +9,7 @@ __pycache__/
 .env
 .env.*
 !.env.*.example
+!.env.example
 .zendesk_oauth_cache.json
 
 # OS/editor
@@ -34,6 +35,10 @@ volume/
 ui/node_modules/
 ui/.next/
 ui/tsconfig.tsbuildinfo
+ui/next-env.d.ts
+# next dev regenerates these tooling notes, keep them out of the repo
+ui/AGENTS.md
+ui/CLAUDE.md
 
 # Lambda layer binaries, platform specific, build_layer.sh regenerates these
 governance/layer/bin/

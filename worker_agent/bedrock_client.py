@@ -17,7 +17,10 @@ command_parser.py needs to lowercase the type names when moving it here.
 Selection between the real client and the mock client (worker_agent/
 bedrock_mock.py) is read once from the LLM_CLIENT environment variable:
 LLM_CLIENT=bedrock (default) uses the real Converse API, LLM_CLIENT=mock
-uses fixture responses and never touches AWS. Call generate_json() at
+uses fixture responses and never touches AWS, LLM_CLIENT=gemini calls the
+Gemini REST API (worker_agent/gemini_client.py, needs GEMINI_API_KEY). Any
+other value raises. The model id constants below follow the same variable,
+so callers pick up the right tier ids for whichever client is active. Call generate_json() at
 module level, it lazily builds and reuses the selected client.
 """
 
@@ -35,15 +38,27 @@ load_dotenv()
 
 logger = logging.getLogger("worker_agent.bedrock")
 
-# Placeholders. Confirm these are actually enabled for the target account and
-# region in the Bedrock console before Phase 8's real deployment, then adjust
-# via the env vars below rather than editing the defaults.
-CLASSIFIER_MODEL = os.getenv("BEDROCK_CLASSIFIER_MODEL", "us.anthropic.claude-3-5-haiku-20241022-v1:0")
-REASONING_MODEL = os.getenv("BEDROCK_REASONING_MODEL", "us.anthropic.claude-3-5-haiku-20241022-v1:0")
-# A genuinely different, stronger model than the worker's tier, same reason
-# gemini_client.py used a separate VERIFIER_MODEL: a second call to the same
-# model is not real independent verification.
-VERIFIER_MODEL = os.getenv("BEDROCK_VERIFIER_MODEL", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+_LLM_MODE = os.getenv("LLM_CLIENT", "bedrock").lower()
+
+if _LLM_MODE == "gemini":
+    # Worker tiers run on flash-lite, the verifier on the stronger flash model
+    # so it is a genuinely different model from the worker's, not just a
+    # second call to the same one.
+    from worker_agent.gemini_client import (
+        CLASSIFIER_MODEL,
+        REASONING_MODEL,
+        VERIFIER_MODEL,
+    )
+else:
+    # Placeholders. Confirm these are actually enabled for the target account and
+    # region in the Bedrock console before Phase 8's real deployment, then adjust
+    # via the env vars below rather than editing the defaults.
+    CLASSIFIER_MODEL = os.getenv("BEDROCK_CLASSIFIER_MODEL", "us.anthropic.claude-3-5-haiku-20241022-v1:0")
+    REASONING_MODEL = os.getenv("BEDROCK_REASONING_MODEL", "us.anthropic.claude-3-5-haiku-20241022-v1:0")
+    # A genuinely different, stronger model than the worker's tier, same reason
+    # gemini_client.py used a separate VERIFIER_MODEL: a second call to the same
+    # model is not real independent verification.
+    VERIFIER_MODEL = os.getenv("BEDROCK_VERIFIER_MODEL", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 
 # Bumped to match gemini_client.py's own tuning, kept identical here since
 # Bedrock throttling under load behaves similarly to the Gemini 503 window
@@ -62,7 +77,7 @@ _TOOL_NAME = "emit_result"
 
 
 class LLMClient(Protocol):
-    """Interface both BedrockClient and the mock in bedrock_mock.py satisfy."""
+    """Interface BedrockClient, GeminiClient and the mock in bedrock_mock.py satisfy."""
 
     async def generate_json(
         self,
@@ -182,8 +197,12 @@ def get_llm_client() -> LLMClient:
         _client_singleton = MockLLMClient()
     elif mode == "bedrock":
         _client_singleton = BedrockClient()
+    elif mode == "gemini":
+        from worker_agent.gemini_client import GeminiClient
+
+        _client_singleton = GeminiClient()
     else:
-        raise RuntimeError(f"Unknown LLM_CLIENT={mode!r}, expected 'bedrock' or 'mock'")
+        raise RuntimeError(f"Unknown LLM_CLIENT={mode!r}, expected 'bedrock', 'mock' or 'gemini'")
     return _client_singleton
 
 

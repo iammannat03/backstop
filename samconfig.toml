@@ -6,12 +6,11 @@ cached = true
 parallel = true
 
 [default.deploy.parameters]
-stack_name = "backstop-local"
+stack_name = "backstop-dev"
 region = "us-east-1"
 capabilities = "CAPABILITY_IAM"
-resolve_s3 = false
-s3_bucket = "backstop-sam-local"
-parameter_overrides = "Stage=local"
+resolve_s3 = true
+parameter_overrides = "Stage=dev LlmClient=mock"
 
 [default.local_start_api.parameters]
 warm_containers = "EAGER"

@@ -64,7 +64,7 @@ from decimal import Decimal
 import boto3
 from boto3.dynamodb.conditions import Key
 
-TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "backstop")
+TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "backstop-local")
 
 STATUS_INDEX = "StatusIndex"
 ALL_TICKETS_INDEX = "AllTicketsIndex"
