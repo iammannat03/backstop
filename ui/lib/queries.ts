@@ -190,7 +190,14 @@ export async function getTickets(filters: TicketListFilters = {}): Promise<Ticke
   }
 
   const start = (page - 1) * pageSize;
-  return { tickets: tickets.slice(start, start + pageSize), total: tickets.length, page, pageSize };
+  const pageTickets = await Promise.all(
+    tickets.slice(start, start + pageSize).map(async (t) => {
+      if (t.status !== "escalated") return t;
+      const policy = await getLatestPolicyDecision(t.id);
+      return policy && policy.decision !== "allow" ? { ...t, policy_blocked: true } : t;
+    }),
+  );
+  return { tickets: pageTickets, total: tickets.length, page, pageSize };
 }
 
 export async function getQueueStats(): Promise<QueueStats> {
@@ -256,6 +263,10 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
   // it's captured in full on the "cross_referenced" audit event.
   const crossReferenced = [...auditTrail].reverse().find((e) => e.event_type === "cross_referenced");
   const verifierAction = (crossReferenced?.detail as unknown as ProposedAction) ?? null;
+
+  if (ticket.status === "escalated" && policyDecision && policyDecision.decision !== "allow") {
+    ticket.policy_blocked = true;
+  }
 
   return { ticket, policyDecision, verificationResult, verifierAction, auditTrail };
 }

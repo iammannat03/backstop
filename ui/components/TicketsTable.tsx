@@ -55,7 +55,7 @@ export function TicketsTable({ tickets }: { tickets: Ticket[] }) {
               {ticket.proposed_action ? describeOutcome(ticket.proposed_action) : "Awaiting proposal…"}
             </div>
             <div className="flex items-center px-3.5 py-[13px]">
-              <PipelineTrack status={ticket.status} pulseDelay={`${(i * 0.31).toFixed(2)}s`} />
+              <PipelineTrack status={ticket.status} policyBlocked={ticket.policy_blocked} pulseDelay={`${(i * 0.31).toFixed(2)}s`} />
             </div>
             <div className="px-3.5 py-[13px] pr-6 text-right font-data text-[12px] text-neutral-600">
               <Age fromIso={ticket.created_at} />

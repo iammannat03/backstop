@@ -54,6 +54,9 @@ export interface Ticket {
   action_type?: ActionType | null;
   slack_channel?: string | null;
   slack_thread_ts?: string | null;
+  // Derived at read time, never stored: true when the ticket is held and its
+  // latest policy decision was deny or escalate rather than allow.
+  policy_blocked?: boolean;
   created_at: string;
   updated_at: string;
 }

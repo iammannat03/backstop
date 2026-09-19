@@ -1,8 +1,16 @@
 import { PIPELINE_STAGES, isDone, isHold, stageIndexFor, statusLabel } from "@/lib/pipeline";
 import type { TicketStatus } from "@/lib/types";
 
-export function PipelineTrack({ status, pulseDelay = "0s" }: { status: TicketStatus; pulseDelay?: string }) {
-  const activeIndex = stageIndexFor(status);
+export function PipelineTrack({
+  status,
+  policyBlocked = false,
+  pulseDelay = "0s",
+}: {
+  status: TicketStatus;
+  policyBlocked?: boolean;
+  pulseDelay?: string;
+}) {
+  const activeIndex = stageIndexFor(status, policyBlocked);
   const hold = isHold(status);
   const inFlight = !hold && !isDone(status);
 
@@ -40,7 +48,7 @@ export function PipelineTrack({ status, pulseDelay = "0s" }: { status: TicketSta
             fontWeight: hold ? 500 : 400,
           }}
         >
-          {statusLabel(status)}
+          {statusLabel(status, policyBlocked)}
         </span>
       </span>
     </div>

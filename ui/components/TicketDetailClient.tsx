@@ -431,7 +431,7 @@ export function TicketDetailClient({
     if (isInProgress) {
       return {
         badge: "IN PROGRESS",
-        headline: statusLabel(ticket.status),
+        headline: statusLabel(ticket.status, ticket.policy_blocked),
         why: "The pipeline is still running, this page updates on its own.",
         recommended: null,
         tone: "neutral" as const,
@@ -498,7 +498,7 @@ export function TicketDetailClient({
         </div>
         <div className="px-[22px] py-3.5">
           <div className="font-data text-[10px] tracking-[0.1em] text-neutral-600">STATUS</div>
-          <div className="mt-1 text-[14px] text-text">{statusLabel(ticket.status)}</div>
+          <div className="mt-1 text-[14px] text-text">{statusLabel(ticket.status, ticket.policy_blocked)}</div>
           <div className="font-data mt-0.5 text-[11px] text-neutral-600">updated {new Date(ticket.updated_at).toLocaleString()}</div>
         </div>
       </div>

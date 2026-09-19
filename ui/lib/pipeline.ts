@@ -40,11 +40,15 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   resolved: "Executed",
 };
 
-export function stageIndexFor(status: TicketStatus): number {
+// A policy block leaves the ticket in "escalated" (same as a verifier hold),
+// so callers pass the derived flag to tell the two apart.
+export function stageIndexFor(status: TicketStatus, policyBlocked = false): number {
+  if (policyBlocked && status === "escalated") return STATUS_TO_STAGE_INDEX.blocked;
   return STATUS_TO_STAGE_INDEX[status] ?? 0;
 }
 
-export function statusLabel(status: TicketStatus): string {
+export function statusLabel(status: TicketStatus, policyBlocked = false): string {
+  if (policyBlocked && status === "escalated") return "Policy block";
   return STATUS_LABEL[status] ?? status;
 }
 
