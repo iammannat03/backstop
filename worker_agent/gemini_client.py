@@ -23,13 +23,13 @@ logger = logging.getLogger("worker_agent.gemini")
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
-# "-latest" aliases rather than a pinned dated version, so the model doesn't
-# disappear out from under a running key.
-CLASSIFIER_MODEL = os.getenv("GEMINI_CLASSIFIER_MODEL", "gemini-flash-lite-latest")
-REASONING_MODEL = os.getenv("GEMINI_REASONING_MODEL", "gemini-flash-lite-latest")
-# Full flash tier, not lite, so the verifier is a different model from the
-# worker's reasoning engine.
-VERIFIER_MODEL = os.getenv("GEMINI_VERIFIER_MODEL", "gemini-flash-latest")
+# Pinned versions rather than "-latest" aliases: the aliases moved onto models
+# that are overloaded or have no quota on this key, which failed live tickets.
+CLASSIFIER_MODEL = os.getenv("GEMINI_CLASSIFIER_MODEL", "gemini-3.1-flash-lite")
+REASONING_MODEL = os.getenv("GEMINI_REASONING_MODEL", "gemini-3.1-flash-lite")
+# A different model from the worker's reasoning engine, so the verifier is an
+# independent check and not a second call to the same model.
+VERIFIER_MODEL = os.getenv("GEMINI_VERIFIER_MODEL", "gemini-3.5-flash-lite")
 
 _MAX_ATTEMPTS = 5
 _RETRY_BACKOFF_SECONDS = 3.0
