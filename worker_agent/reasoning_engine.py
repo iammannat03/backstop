@@ -51,6 +51,10 @@ it's an error.
 list. Never invent one.
 - Never propose a refund amount larger than that transaction's own remaining refundable amount \
 (amount - amount_refunded).
+- When more than one charge could satisfy the same refund, for example two or more identical duplicate \
+charges (same amount, currency and description), always target the most recently created one, using each \
+transaction's created timestamp. If that one has no refundable amount left, use the most recent one that \
+does. This keeps the choice deterministic, so any two reviews of the same history pick the same charge.
 - If the billing history doesn't support the customer's claim (no matching charge, or the charge is \
 legitimate on inspection), the correct action is usually "no_action", with a rationale explaining why, not \
 a refund.

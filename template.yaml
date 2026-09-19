@@ -164,7 +164,7 @@ Resources:
     Properties:
       CodeUri: .
       Handler: worker_agent.classify_handler.lambda_handler
-      Timeout: 60
+      Timeout: 120
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BackstopTable
@@ -191,7 +191,7 @@ Resources:
     Properties:
       CodeUri: .
       Handler: worker_agent.reason_handler.lambda_handler
-      Timeout: 60
+      Timeout: 120
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BackstopTable
@@ -232,7 +232,7 @@ Resources:
     Properties:
       CodeUri: .
       Handler: verifier_agent.verify_handler.lambda_handler
-      Timeout: 60
+      Timeout: 120
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BackstopTable
@@ -259,7 +259,7 @@ Resources:
     Properties:
       CodeUri: .
       Handler: command_agent.command_handler.lambda_handler
-      Timeout: 60
+      Timeout: 120
       MemorySize: 512
       Layers:
         - !Ref OpaLayer
