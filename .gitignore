@@ -8,6 +8,7 @@ __pycache__/
 # Environment
 .env
 .env.*
+!.env.*.example
 .zendesk_oauth_cache.json
 
 # OS/editor
@@ -33,3 +34,6 @@ volume/
 ui/node_modules/
 ui/.next/
 ui/tsconfig.tsbuildinfo
+
+# Lambda layer binaries, platform specific, build_layer.sh regenerates these
+governance/layer/bin/

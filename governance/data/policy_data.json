@@ -1,0 +1,39 @@
+{
+  "known_action_types": [
+    "refund",
+    "partial_refund",
+    "no_action",
+    "escalate",
+    "cancel_subscription",
+    "apply_account_credit",
+    "flag_for_fraud_review"
+  ],
+  "refund_limits": {
+    "max_single_refund_cents": {
+      "usd": 20000,
+      "eur": 18000,
+      "gbp": 16000
+    },
+    "max_refunds_per_customer_per_month": 3
+  },
+  "credit_limits": {
+    "max_account_credit_cents": {
+      "usd": 20000,
+      "eur": 18000,
+      "gbp": 16000
+    }
+  },
+  "escalation": {
+    "ambiguous_intent_confidence_threshold": 0.6,
+    "repeat_customer_ticket_threshold": 3,
+    "high_value_transaction_cents": {
+      "usd": 50000,
+      "eur": 45000,
+      "gbp": 40000
+    }
+  },
+  "blocked_patterns": {
+    "blocked_customer_ids": ["cus_fraud_blocked_1", "cus_fraud_blocked_2"],
+    "blocked_action_on_disputed_chargeback": true
+  }
+}

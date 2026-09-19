@@ -1,8 +1,11 @@
-version: "3.9"
-
 services:
   localstack:
-    image: localstack/localstack:latest
+    # Pinned below 4.x on purpose: the "latest" tag now refuses to start
+    # without a LOCALSTACK_AUTH_TOKEN, even for the services this project
+    # only ever uses from the free community edition. 3.8.1 runs all of
+    # dynamodb, lambda, stepfunctions, apigateway, events, iam, sts,
+    # cloudformation, logs, and s3 with no account or token needed.
+    image: localstack/localstack:3.8.1
     container_name: backstop-localstack
     ports:
       - "4566:4566"
@@ -12,7 +15,6 @@ services:
       - LAMBDA_EXECUTOR=docker
       - DOCKER_HOST=unix:///var/run/docker.sock
       - PERSISTENCE=1
-      - DEFAULT_REGION=us-east-1
     volumes:
       - "backstop_localstack_data:/var/lib/localstack"
       - "/var/run/docker.sock:/var/run/docker.sock"
