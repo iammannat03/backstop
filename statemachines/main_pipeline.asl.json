@@ -1,0 +1,260 @@
+{
+  "Comment": "Backstop main pipeline. Data flow strategy: every Task state writes its output to its own key under ResultPath (classify_result, investigate_result, reason_result, propose_result, policy_result, verify_result, execute_result, audit_result) instead of replacing the running state. That way any later state can still reach an earlier state's output by JsonPath, for example the final safety Choice reads $.propose_result.proposed_action.action_type even though three states have run since propose_handler produced it. Only ticket_id is carried at the top level from the start.",
+  "StartAt": "Classify",
+  "States": {
+    "Classify": {
+      "Type": "Task",
+      "Resource": "${ClassifyFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id"
+      },
+      "ResultPath": "$.classify_result",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "CheckBillingRelevant"
+    },
+    "CheckBillingRelevant": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.classify_result.is_billing_relevant",
+          "BooleanEquals": true,
+          "Next": "Investigate"
+        }
+      ],
+      "Default": "ProposeShortCircuit"
+    },
+    "Investigate": {
+      "Type": "Task",
+      "Resource": "${InvestigateFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id"
+      },
+      "ResultPath": "$.investigate_result",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "Reason"
+    },
+    "Reason": {
+      "Type": "Task",
+      "Resource": "${ReasonFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "stripe_history.$": "$.investigate_result.stripe_history"
+      },
+      "ResultPath": "$.reason_result",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "Propose"
+    },
+    "Propose": {
+      "Type": "Task",
+      "Resource": "${ProposeFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "raw_action.$": "$.reason_result.raw_action",
+        "stripe_history.$": "$.reason_result.stripe_history"
+      },
+      "ResultPath": "$.propose_result",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "PolicyGate"
+    },
+    "ProposeShortCircuit": {
+      "Type": "Task",
+      "Comment": "Classifier said this ticket is not billing-relevant. Skip Investigate and Reason entirely and call propose_handler directly with a synthesized no_action, exactly mirroring backstop-prac's worker_agent/pipeline.py else branch. The synthesized event shape is documented in worker_agent/propose_handler.py's own docstring.",
+      "Resource": "${ProposeFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "raw_action": {
+          "action_type": "no_action",
+          "amount": 0,
+          "currency": "usd",
+          "target_transaction_id": null,
+          "target_subscription_id": null,
+          "rationale": "Classified as not billing-relevant, no Stripe investigation or reasoning performed.",
+          "confidence.$": "$.classify_result.classification.confidence",
+          "customer_message": null
+        },
+        "stripe_history": {
+          "customer_id": null
+        }
+      },
+      "ResultPath": "$.propose_result",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "PolicyGate"
+    },
+    "PolicyGate": {
+      "Type": "Task",
+      "Resource": "${PolicyGateFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "proposed_action.$": "$.propose_result.proposed_action"
+      },
+      "ResultPath": "$.policy_result",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "CheckPolicyDecision"
+    },
+    "CheckPolicyDecision": {
+      "Type": "Choice",
+      "Comment": "Matches backstop-prac's verifier_agent/pipeline.py: `if policy_result[\"decision\"] != \"allow\"`, both deny and escalate block here, unlike the human command path where only deny blocks.",
+      "Choices": [
+        {
+          "Variable": "$.policy_result.decision",
+          "StringEquals": "allow",
+          "Next": "Verify"
+        }
+      ],
+      "Default": "AuditPolicyBlocked"
+    },
+    "AuditPolicyBlocked": {
+      "Type": "Task",
+      "Resource": "${AuditFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "outcome": "policy_blocked",
+        "matched_rule.$": "$.policy_result.matched_rule",
+        "reason.$": "$.policy_result.reason"
+      },
+      "ResultPath": "$.audit_result",
+      "End": true
+    },
+    "Verify": {
+      "Type": "Task",
+      "Resource": "${VerifyFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id"
+      },
+      "ResultPath": "$.verify_result",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "CheckConsistent"
+    },
+    "CheckConsistent": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.verify_result.consistent",
+          "BooleanEquals": true,
+          "Next": "CheckNeverAutoExecute"
+        }
+      ],
+      "Default": "AuditVerifierMismatch"
+    },
+    "AuditVerifierMismatch": {
+      "Type": "Task",
+      "Resource": "${AuditFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "outcome": "verifier_mismatch",
+        "mismatch_type.$": "$.verify_result.mismatch_type"
+      },
+      "ResultPath": "$.audit_result",
+      "End": true
+    },
+    "CheckNeverAutoExecute": {
+      "Type": "Choice",
+      "Comment": "Safety gate from backstop-prac's verifier_agent/pipeline.py NEVER_AUTO_EXECUTE set. The verifier can independently agree with the worker's action_type and still consistent=true, but if that agreed action_type is escalate or flag_for_fraud_review, agreeing on it means 'we agree a human must handle this', never 'safe to auto-execute'. This check does not live inside verify_handler.py, it lives here, exactly where it lived in the original orchestrator.",
+      "Choices": [
+        {
+          "Or": [
+            {
+              "Variable": "$.propose_result.proposed_action.action_type",
+              "StringEquals": "escalate"
+            },
+            {
+              "Variable": "$.propose_result.proposed_action.action_type",
+              "StringEquals": "flag_for_fraud_review"
+            }
+          ],
+          "Next": "AuditVerifierAgreedEscalate"
+        }
+      ],
+      "Default": "Execute"
+    },
+    "AuditVerifierAgreedEscalate": {
+      "Type": "Task",
+      "Resource": "${AuditFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "outcome": "verifier_agreed_escalate",
+        "action_type.$": "$.propose_result.proposed_action.action_type"
+      },
+      "ResultPath": "$.audit_result",
+      "End": true
+    },
+    "Execute": {
+      "Type": "Task",
+      "Resource": "${ExecuteFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id"
+      },
+      "ResultPath": "$.execute_result",
+      "Comment": "Safe to retry: execute_handler derives its Stripe Idempotency-Key from ticket_id alone, so a retried invocation after a transient failure reissues the identical key and Stripe treats the second call as a no-op rather than a second refund.",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "AuditExecuted"
+    },
+    "AuditExecuted": {
+      "Type": "Task",
+      "Resource": "${AuditFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "outcome": "executed",
+        "execute_result.$": "$.execute_result"
+      },
+      "ResultPath": "$.audit_result",
+      "End": true
+    }
+  }
+}

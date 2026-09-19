@@ -1,0 +1,95 @@
+{
+  "Comment": "Backstop human command pipeline, triggered from the Slack events Lambda (built in the ingestion phase) when someone replies @backstop <command> in a ticket's thread. Shorter than the main pipeline: command_handler already runs the OPA gate itself and persists the proposed action when ready_to_execute, so there is no separate PolicyGate state here.",
+  "StartAt": "ParseCommand",
+  "States": {
+    "ParseCommand": {
+      "Type": "Task",
+      "Resource": "${CommandFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "raw_command.$": "$.raw_command",
+        "slack_user_id.$": "$.slack_user_id",
+        "slack_channel.$": "$.slack_channel"
+      },
+      "ResultPath": "$.command_result",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "CheckOutcome"
+    },
+    "CheckOutcome": {
+      "Type": "Choice",
+      "Comment": "deny still blocks a human command, escalate/flag_for_fraud_review from the parser means needs_clarification instead of blocking, since the human is already the approving party escalate would otherwise route to.",
+      "Choices": [
+        {
+          "Variable": "$.command_result.outcome",
+          "StringEquals": "ready_to_execute",
+          "Next": "ExecuteCommand"
+        },
+        {
+          "Variable": "$.command_result.outcome",
+          "StringEquals": "blocked",
+          "Next": "AuditBlocked"
+        }
+      ],
+      "Default": "AuditNeedsClarification"
+    },
+    "ExecuteCommand": {
+      "Type": "Task",
+      "Resource": "${ExecuteFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id"
+      },
+      "ResultPath": "$.execute_result",
+      "Comment": "Same Stripe-side idempotency as the main pipeline's Execute state, safe to retry.",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "AuditExecuted"
+    },
+    "AuditExecuted": {
+      "Type": "Task",
+      "Resource": "${AuditFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "outcome": "executed",
+        "execute_result.$": "$.execute_result"
+      },
+      "ResultPath": "$.audit_result",
+      "End": true
+    },
+    "AuditBlocked": {
+      "Type": "Task",
+      "Resource": "${AuditFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "outcome": "command_blocked",
+        "matched_rule.$": "$.command_result.matched_rule",
+        "reason.$": "$.command_result.reason"
+      },
+      "ResultPath": "$.audit_result",
+      "End": true
+    },
+    "AuditNeedsClarification": {
+      "Type": "Task",
+      "Resource": "${AuditFunctionArn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "outcome": "command_needs_clarification",
+        "rationale.$": "$.command_result.rationale"
+      },
+      "ResultPath": "$.audit_result",
+      "End": true
+    }
+  }
+}

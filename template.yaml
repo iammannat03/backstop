@@ -3,17 +3,6 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   Backstop, ticket triage and refund automation on AWS.
 
-Globals:
-  Function:
-    Runtime: python3.12
-    Architectures:
-      - x86_64
-    Timeout: 30
-    MemorySize: 256
-    Environment:
-      Variables:
-        POWERTOOLS_SERVICE_NAME: backstop
-
 Parameters:
   Stage:
     Type: String
@@ -22,12 +11,289 @@ Parameters:
       - local
       - dev
       - prod
+  LlmClient:
+    Type: String
+    Default: mock
+    AllowedValues:
+      - mock
+      - bedrock
+    Description: mock returns fixture responses and never calls Bedrock.
+  StripeApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
 
-Resources: {}
-# Lambda functions land here in the worker, verifier, execution, and
-# command agent phases. The state machine and its IAM role land here in
-# the orchestration phase. The DynamoDB table lands here in the
-# persistence phase. The Slack and Zendesk polling entry points land here
-# in the ingestion phase.
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures:
+      - arm64
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        POWERTOOLS_SERVICE_NAME: backstop
+        DYNAMODB_TABLE_NAME: !Ref BackstopTable
+        LLM_CLIENT: !Ref LlmClient
+        STRIPE_API_KEY: !Ref StripeApiKey
 
-Outputs: {}
+Resources:
+  BackstopTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub backstop-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+        - AttributeName: GSI2PK
+          AttributeType: S
+        - AttributeName: GSI2SK
+          AttributeType: S
+        - AttributeName: GSI3PK
+          AttributeType: S
+        - AttributeName: GSI3SK
+          AttributeType: S
+        - AttributeName: GSI4PK
+          AttributeType: S
+        - AttributeName: GSI4SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: StatusIndex
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: AllTicketsIndex
+          KeySchema:
+            - AttributeName: GSI2PK
+              KeyType: HASH
+            - AttributeName: GSI2SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ZendeskIndex
+          KeySchema:
+            - AttributeName: GSI3PK
+              KeyType: HASH
+            - AttributeName: GSI3SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: EntityDateIndex
+          KeySchema:
+            - AttributeName: GSI4PK
+              KeyType: HASH
+            - AttributeName: GSI4SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  OpaLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub backstop-opa-${Stage}
+      Description: opa binary, mounted at /opt/bin/opa
+      ContentUri: governance/layer/
+      CompatibleArchitectures:
+        - arm64
+      CompatibleRuntimes:
+        - python3.12
+
+  ClassifyFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: worker_agent.classify_handler.lambda_handler
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: "*"
+
+  InvestigateFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: worker_agent.investigate_handler.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+
+  ReasonFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: worker_agent.reason_handler.lambda_handler
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: "*"
+
+  ProposeFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: worker_agent.propose_handler.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+
+  PolicyGateFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: governance.policy_handler.lambda_handler
+      MemorySize: 512
+      Layers:
+        - !Ref OpaLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+
+  VerifyFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: verifier_agent.verify_handler.lambda_handler
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: "*"
+
+  ExecuteFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: execution.execute_handler.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+
+  CommandFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: command_agent.command_handler.lambda_handler
+      Timeout: 60
+      MemorySize: 512
+      Layers:
+        - !Ref OpaLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: "*"
+
+  AuditFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: .
+      Handler: audit.audit_handler.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BackstopTable
+
+  MainPipelineStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub backstop-main-pipeline-${Stage}
+      DefinitionUri: statemachines/main_pipeline.asl.json
+      DefinitionSubstitutions:
+        ClassifyFunctionArn: !GetAtt ClassifyFunction.Arn
+        InvestigateFunctionArn: !GetAtt InvestigateFunction.Arn
+        ReasonFunctionArn: !GetAtt ReasonFunction.Arn
+        ProposeFunctionArn: !GetAtt ProposeFunction.Arn
+        PolicyGateFunctionArn: !GetAtt PolicyGateFunction.Arn
+        VerifyFunctionArn: !GetAtt VerifyFunction.Arn
+        ExecuteFunctionArn: !GetAtt ExecuteFunction.Arn
+        AuditFunctionArn: !GetAtt AuditFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ClassifyFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref InvestigateFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ReasonFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ProposeFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref PolicyGateFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref VerifyFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ExecuteFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref AuditFunction
+
+  CommandPipelineStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub backstop-command-pipeline-${Stage}
+      DefinitionUri: statemachines/command_pipeline.asl.json
+      DefinitionSubstitutions:
+        CommandFunctionArn: !GetAtt CommandFunction.Arn
+        ExecuteFunctionArn: !GetAtt ExecuteFunction.Arn
+        AuditFunctionArn: !GetAtt AuditFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CommandFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ExecuteFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref AuditFunction
+
+# The Slack and Zendesk polling entry points land here in the ingestion phase.
+
+Outputs:
+  BackstopTableName:
+    Value: !Ref BackstopTable
+  MainPipelineStateMachineArn:
+    Value: !Ref MainPipelineStateMachine
+  CommandPipelineStateMachineArn:
+    Value: !Ref CommandPipelineStateMachine
