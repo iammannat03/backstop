@@ -1,3 +1,4 @@
+import { signIn } from "@/auth";
 import { TicketDetailClient } from "@/components/TicketDetailClient";
 import { requirePageViewer } from "@/lib/authz";
 import { hasRole } from "@/lib/roles";
@@ -13,7 +14,19 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
   // Built server-side so ZENDESK_SUBDOMAIN stays out of the client bundle.
   const zendeskSubdomain = process.env.ZENDESK_SUBDOMAIN ?? null;
 
-  return <TicketDetailClient detail={detail} zendeskSubdomain={zendeskSubdomain}
+  async function signInWithSlack() {
+    "use server";
+    await signIn("slack", { redirectTo: `/tickets/${encodeURIComponent(id)}` });
+  }
+
+  return (
+    <TicketDetailClient
+      detail={detail}
+      zendeskSubdomain={zendeskSubdomain}
       canDecide={hasRole(viewer.role, "approver")}
-    />;
+      // Only a guest can gain access by signing in, a signed-in viewer
+      // without the approver role gets the plain read-only message.
+      signInAction={viewer.role === "guest" ? signInWithSlack : undefined}
+    />
+  );
 }

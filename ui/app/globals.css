@@ -395,12 +395,19 @@ body {
   .tickets-grid {
     display: grid;
     grid-template-columns: 100px minmax(0, 1.15fr) minmax(0, 0.9fr) minmax(16rem, 0.8fr) 7.5rem;
+    grid-template-rows: auto;
+    grid-auto-rows: minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
   }
 
   .tickets-row {
     display: grid;
     grid-template-columns: subgrid;
     grid-column: 1 / -1;
+    min-height: 0;
+    align-items: center;
+    overflow: hidden;
   }
 
   [data-slot="sidebar"] a {

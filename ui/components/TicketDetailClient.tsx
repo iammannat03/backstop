@@ -320,10 +320,12 @@ export function TicketDetailClient({
   detail: initialDetail,
   zendeskSubdomain,
   canDecide,
+  signInAction,
 }: {
   detail: TicketDetail | null;
   zendeskSubdomain: string | null;
   canDecide: boolean;
+  signInAction?: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -542,7 +544,19 @@ export function TicketDetailClient({
       {stillPending && !canDecide && (
         <div className="border-b border-divider bg-neutral-100 px-[22px] py-[14px]">
           <span className="font-data text-[11.5px] text-neutral-700">
-            Read-only access. Approving, overriding or holding needs an approver or admin.
+            {signInAction ? (
+              <>
+                Read-only access.{" "}
+                <form action={signInAction} className="inline">
+                  <button type="submit" className="text-accent underline underline-offset-2 hover:text-text">
+                    Sign in with Slack
+                  </button>
+                </form>{" "}
+                to approve, override or hold.
+              </>
+            ) : (
+              "Read-only access. Approving, overriding or holding needs an approver or admin."
+            )}
           </span>
         </div>
       )}

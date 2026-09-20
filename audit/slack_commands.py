@@ -3,9 +3,11 @@ replies in-thread under a ticket's Slack audit post, mentioning the bot, and
 the command pipeline state machine turns that free text into an executed
 action.
 
-Requires a Slack app with bot scopes chat:write, channels:history (or
-groups:history for a private channel), app_mentions:read, and Event
-Subscriptions pointed at POST /slack/events on the API Gateway URL.
+Requires a Slack app with bot scopes chat:write and app_mentions:read, and
+Event Subscriptions pointed at POST /slack/events on the API Gateway URL with
+the app_mention bot event subscribed. Subscribing to message.channels as well
+(which also needs channels:history) is optional, a message that arrives both
+ways is handled once.
 
 Slack needs a 200 within 3 seconds, so this only verifies, de-duplicates and
 starts the state machine execution asynchronously (StartExecution returns
@@ -125,7 +127,15 @@ def lambda_handler(event, context):
     )
     # Only threaded replies matter, and bot messages (including our own audit
     # posts) must be ignored to avoid ever reacting to our own output.
-    if slack_event.get("type") != "message" or slack_event.get("subtype") or slack_event.get("bot_id"):
+    # A threaded reply that mentions the bot arrives as an app_mention event
+    # (needs only app_mentions:read) or, if the app also subscribes to message
+    # events, as a message event. Both are accepted, and the channel and ts
+    # claim below keeps a message that produces both from running twice.
+    if slack_event.get("type") not in ("message", "app_mention") or slack_event.get("subtype") or slack_event.get("bot_id"):
+        return json_response(200, {"ok": True})
+    message_key = f"slack_msg:{slack_event.get('channel')}:{slack_event.get('ts')}"
+    if slack_event.get("ts") and not state_store.claim_key(message_key, _EVENT_DEDUP_TTL_SECONDS):
+        logger.info("Ignoring duplicate delivery of message %s", message_key)
         return json_response(200, {"ok": True})
     thread_ts = slack_event.get("thread_ts")
     if not thread_ts or thread_ts == slack_event.get("ts"):
@@ -177,5 +187,7 @@ def lambda_handler(event, context):
         # Let Slack's retry deliver the event again.
         if dedup_key:
             state_store.release_key(dedup_key)
+        if slack_event.get("ts"):
+            state_store.release_key(message_key)
         return json_response(500, {"detail": "Could not start command pipeline"})
     return json_response(200, {"ok": True})

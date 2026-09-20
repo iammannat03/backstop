@@ -145,7 +145,7 @@ function queryAllTickets(): Promise<Item[]> {
 // remaining filters run in code over the result so the total stays exact.
 export async function getTickets(filters: TicketListFilters = {}): Promise<TicketListResult> {
   const { q, customerId, status = "all", actionType = "all", dateFrom, dateTo } = filters;
-  const page = Math.max(1, filters.page ?? 1);
+  const requestedPage = Math.max(1, filters.page ?? 1);
   const pageSize = filters.pageSize ?? 8;
 
   let rawItems: Item[];
@@ -189,6 +189,9 @@ export async function getTickets(filters: TicketListFilters = {}): Promise<Ticke
     }
   }
 
+  // The page size can change with the window height, so a page that no
+  // longer exists falls back to the last one instead of coming back empty.
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(tickets.length / pageSize)));
   const start = (page - 1) * pageSize;
   const pageTickets = await Promise.all(
     tickets.slice(start, start + pageSize).map(async (t) => {

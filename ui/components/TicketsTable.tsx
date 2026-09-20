@@ -15,7 +15,7 @@ function accountName(ticket: Ticket): string {
 
 export function TicketsTable({ tickets }: { tickets: Ticket[] }) {
   return (
-    <div className="tickets-grid overflow-x-auto border border-divider bg-[color-mix(in_srgb,var(--color-neutral-100)_60%,transparent)]">
+    <div className="tickets-grid min-h-0 flex-1 overflow-x-auto overflow-y-hidden border border-divider bg-[color-mix(in_srgb,var(--color-neutral-100)_60%,transparent)]">
       <div className="tickets-row border-b border-divider bg-neutral-200 font-data text-[10px] tracking-[0.1em] text-neutral-600">
         <div className="px-3.5 py-2">TICKET</div>
         <div className="px-3.5 py-2">ACCOUNT</div>
@@ -44,20 +44,20 @@ export function TicketsTable({ tickets }: { tickets: Ticket[] }) {
                 : undefined
             }
           >
-            <div className="px-3.5 py-[13px] font-data text-[12.5px] font-medium">BSP-{ticket.zendesk_ticket_id}</div>
-            <div className="min-w-0 px-3.5 py-[13px]">
+            <div className="px-3.5 py-1.5 font-data text-[12.5px] font-medium">BSP-{ticket.zendesk_ticket_id}</div>
+            <div className="min-w-0 px-3.5 py-1.5">
               <div className="truncate text-[14px] text-text">{accountName(ticket)}</div>
               <div className="font-data truncate text-[10.5px] text-neutral-600">
                 {ticket.customer_id ?? "unresolved"}
               </div>
             </div>
-            <div className="truncate px-3.5 py-[13px] text-[13.5px] text-neutral-800">
+            <div className="truncate px-3.5 py-1.5 text-[13.5px] text-neutral-800">
               {ticket.proposed_action ? describeOutcome(ticket.proposed_action) : "Awaiting proposal…"}
             </div>
-            <div className="flex items-center px-3.5 py-[13px]">
+            <div className="flex items-center px-3.5 py-1.5">
               <PipelineTrack status={ticket.status} policyBlocked={ticket.policy_blocked} pulseDelay={`${(i * 0.31).toFixed(2)}s`} />
             </div>
-            <div className="px-3.5 py-[13px] pr-6 text-right font-data text-[12px] text-neutral-600">
+            <div className="px-3.5 py-1.5 pr-6 text-right font-data text-[12px] text-neutral-600">
               <Age fromIso={ticket.created_at} />
             </div>
           </Link>
