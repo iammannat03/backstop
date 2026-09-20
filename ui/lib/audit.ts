@@ -87,10 +87,16 @@ export function eventPayload(eventType: string, detail: Record<string, unknown> 
     case "execution_failed":
       return pick(["status_code", "reason", "error"]);
     case "human_decision":
-      return pick(["decision"]);
+      return [pick(["decision"]), decidedByLabel(detail)].filter(Boolean).join(" · ");
     default:
       return "";
   }
+}
+
+function decidedByLabel(detail: Record<string, unknown>): string {
+  const by = detail.decided_by as { name?: string | null; id?: string; role?: string } | undefined;
+  if (!by) return "";
+  return `by=${by.name || by.id}${by.role ? ` (${by.role})` : ""}`;
 }
 
 function stringifyVal(v: unknown): string {
@@ -112,5 +118,9 @@ const EVENT_SUMMARY: Record<string, (detail: Record<string, unknown>) => string>
   verification_result: (d) => String(d.notes ?? ""),
   executed: (d) => (d.refund_id ? `Refund ${d.refund_id} issued.` : `Resolved: ${d.action_type}, no Stripe call needed.`),
   execution_failed: (d) => `Execution failed: ${d.status_code ?? d.reason ?? "error"}`,
-  human_decision: (d) => `Human recorded decision: ${d.decision}.`,
+  human_decision: (d) => {
+    const by = d.decided_by as { name?: string | null; id?: string } | undefined;
+    const who = by?.name || by?.id;
+    return `${who ? `${who} recorded` : "Human recorded"} decision: ${d.decision}.`;
+  },
 };

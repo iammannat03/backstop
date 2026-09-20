@@ -319,9 +319,11 @@ function ReasoningTrail({
 export function TicketDetailClient({
   detail: initialDetail,
   zendeskSubdomain,
+  canDecide,
 }: {
   detail: TicketDetail | null;
   zendeskSubdomain: string | null;
+  canDecide: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -537,7 +539,14 @@ export function TicketDetailClient({
       </div>
 
       {/* Decision actions: right under the summary, not buried at the bottom */}
-      {stillPending && (
+      {stillPending && !canDecide && (
+        <div className="border-b border-divider bg-neutral-100 px-[22px] py-[14px]">
+          <span className="font-data text-[11.5px] text-neutral-700">
+            Read-only access. Approving, overriding or holding needs an approver or admin.
+          </span>
+        </div>
+      )}
+      {stillPending && canDecide && (
         <div className="flex flex-wrap items-center gap-2.5 border-b border-divider bg-neutral-100 px-[22px] py-[14px]">
           {hasRealChoice ? (
             <>

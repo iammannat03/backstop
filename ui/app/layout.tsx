@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Barlow, Barlow_Condensed, IBM_Plex_Mono } from "next/font/google";
 import { AppSidebar } from "@/components/app-sidebar";
+import { UserMenu } from "@/components/user-menu";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -51,7 +52,7 @@ export default function RootLayout({
             </Suspense>
             <SidebarInset className="min-h-0 overflow-hidden bg-bg">
               <Suspense fallback={null}>
-                <SiteHeader />
+                <SiteHeader userMenu={<UserMenu />} />
               </Suspense>
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
             </SidebarInset>

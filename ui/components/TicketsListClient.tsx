@@ -16,7 +16,15 @@ interface ListData {
   pageSize: number;
 }
 
-export function TicketsListClient({ initial, initialStats }: { initial: ListData; initialStats: QueueStats }) {
+export function TicketsListClient({
+  initial,
+  initialStats,
+  canSync,
+}: {
+  initial: ListData;
+  initialStats: QueueStats;
+  canSync: boolean;
+}) {
   const searchParams = useSearchParams();
   const query = searchParams.toString();
 
@@ -54,14 +62,16 @@ export function TicketsListClient({ initial, initialStats }: { initial: ListData
         <StatsBar stats={stats} />
       </div>
       <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden px-[22px] pb-6">
-        <div className="flex flex-wrap items-center gap-2.5 border-b border-divider bg-neutral-100 px-[22px] py-2.5">
-          <button disabled={syncing} onClick={handleRefresh} className="btn btn-secondary text-[12px]">
-            {syncing ? "Syncing…" : "↻ Refresh"}
-          </button>
-          <span className="font-data text-[11px] text-neutral-600">
-            {syncResult ?? "Pulls new tickets from Zendesk right now instead of waiting for the poller"}
-          </span>
-        </div>
+        {canSync && (
+          <div className="flex flex-wrap items-center gap-2.5 border-b border-divider bg-neutral-100 px-[22px] py-2.5">
+            <button disabled={syncing} onClick={handleRefresh} className="btn btn-secondary text-[12px]">
+              {syncing ? "Syncing…" : "↻ Refresh"}
+            </button>
+            <span className="font-data text-[11px] text-neutral-600">
+              {syncResult ?? "Pulls new tickets from Zendesk right now instead of waiting for the poller"}
+            </span>
+          </div>
+        )}
         <TicketsFilters
           // Remounts the filter inputs when the URL's filters change, since
           // they're uncontrolled (defaultValue) and won't otherwise re-sync.

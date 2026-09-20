@@ -1,3 +1,5 @@
+import { requirePageViewer } from "@/lib/authz";
+import { hasRole } from "@/lib/roles";
 import { TicketsListClient } from "@/components/TicketsListClient";
 import { getQueueStats, getTickets } from "@/lib/queries";
 import type { ActionType } from "@/lib/types";
@@ -20,6 +22,10 @@ export default async function TicketsPage({
   }>;
 }) {
   const params = await searchParams;
+  const qs = new URLSearchParams(
+    Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string"),
+  ).toString();
+  const viewer = await requirePageViewer(qs ? `/?${qs}` : "/");
   const status = params.status as "all" | "needs_review" | "in_progress" | "resolved" | undefined;
 
   const [stats, list] = await Promise.all([
@@ -35,5 +41,5 @@ export default async function TicketsPage({
     }),
   ]);
 
-  return <TicketsListClient initial={list} initialStats={stats} />;
+  return <TicketsListClient initial={list} initialStats={stats} canSync={hasRole(viewer.role, "admin")} />;
 }

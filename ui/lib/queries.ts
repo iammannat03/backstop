@@ -343,8 +343,13 @@ export async function recordHumanDecision(
   ticketId: string,
   decision: "approve_verifier" | "approve_worker" | "hold",
   chosenAction: ProposedAction | null,
+  decidedBy: { id: string; name: string | null; role: string },
 ): Promise<{ status: string; refundId?: string; error?: string }> {
-  await insertAuditRecord(ticketId, "human_decision", "human", { decision, chosenAction });
+  await insertAuditRecord(ticketId, "human_decision", "human", {
+    decision,
+    chosenAction,
+    decided_by: { id: decidedBy.id, name: decidedBy.name, role: decidedBy.role },
+  });
 
   if (decision === "hold" || !chosenAction) {
     return { status: "escalated" };

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -10,7 +11,7 @@ const TITLES: { prefix: string; title: string; subtitle: string }[] = [
   { prefix: "/", title: "Tickets", subtitle: "Live ticket pipeline · search, filter, and review" },
 ];
 
-export function SiteHeader() {
+export function SiteHeader({ userMenu }: { userMenu?: ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isEscalationView = pathname === "/" && searchParams.get("status") === "needs_review";
@@ -24,8 +25,9 @@ export function SiteHeader() {
       <Separator orientation="vertical" className="!h-4 !self-center" />
       <div className="heading-label min-w-0 text-[14px] tracking-[0.08em] text-text">{meta.title}</div>
       <span className="font-data hidden min-w-0 truncate text-[11px] text-neutral-500 md:inline">{meta.subtitle}</span>
-      <div className="ml-auto shrink-0">
+      <div className="ml-auto flex shrink-0 items-center gap-4">
         <LiveClock />
+        {userMenu}
       </div>
     </header>
   );
